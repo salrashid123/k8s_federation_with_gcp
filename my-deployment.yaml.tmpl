@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: svc1-sa
+---
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/service-account-token
+metadata:
+  name: mysecretname
+  annotations:
+    kubernetes.io/service-account.name: svc1-sa
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp-deployment
+  labels:
+    type: myapp-deployment-label
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      type: myapp
+  template:
+    metadata:
+      labels:
+        type: myapp
+        tier: frontend
+        version: v1
+    spec:
+      serviceAccountName: svc1-sa    
+      containers:
+      - name: frontend
+        image: debian
+        args:
+        - sleep
+        - "1000000"
+        env:
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: "/adc/creds/sts-creds.json"         
+        volumeMounts:
+        - mountPath: /var/run/secrets/iot-token
+          name: iot-token
+        - mountPath: /adc/creds
+          name: adc-config-vol               
+      serviceAccountName: svc1-sa                 
+      volumes:
+      - name: iot-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: iot-token
+              expirationSeconds: 7200
+              audience: gcp-sts-audience
+      - name: adc-config-vol
+        configMap:
+          name: adc-config             
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: adc-config
+data:
+  sts-creds.json: |
+    {
+      "type": "external_account",
+      "audience": "//iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/pool-k8s/providers/oidc-provider-k8s-1",
+      "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
+      "token_url": "https://sts.googleapis.com/v1/token",
+      "credential_source": {
+        "file": "/var/run/secrets/iot-token/iot-token"
+      },
+      "service_account_impersonation_url": "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/oidc-federated@$PROJECT_ID.iam.gserviceaccount.com:generateAccessToken"
+    }
