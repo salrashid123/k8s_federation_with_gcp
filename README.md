@@ -14,7 +14,7 @@ This article focuses on using the Kubernetes Service account to authenticate to 
 > This repo is NOT supported by Google
 
 
-If your'e using GKE, don't bother reading this...just use the built in [Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity)
+If your'e using GKE, don't bother reading this...just use the built in [Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity).  If its a raw k8s service on AWS or Azure, see [Configuring workload identity federation](https://cloud.google.com/iam/docs/configuring-workload-identity-federation#aws)
 
 ---
 
