@@ -4,17 +4,17 @@ Or..how to use a plain-old [Kubernetes service account](https://kubernetes.io/do
 
 With this technique, you can enable an onprem k8s cluster to directly authenticate and access GCP Services without needing to distribute [GCP Service Account Keys](https://cloud.google.com/kubernetes-engine/docs/tutorials/authenticating-to-cloud-platform#importing_credentials_as_a_secret) as a [Kubernetes Secret](https://kubernetes.io/docs/concepts/configuration/secret/).  First off, don't do that...dont' download a GCP service account key if you can help it (see [Best practices for securing service accounts](https://cloud.google.com/iam/docs/best-practices-for-securing-service-accounts))
 
-Plese note we are talking about two different Service Accounts:
+Please note we are talking about two different Service Accounts:
 
 * [GCP Service Accounts](https://cloud.google.com/iam/docs/service-accounts#default)
 * [Kubernetes Service Accounts](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/)
 
-This article focuses on using the Kubernetes Service account to authenticate to GCP and _optinally_ impersonate a GCP Service Account wihtout needed to download a key.  Its basically federating the Kubernetes Cluster with GCP.
+This article focuses on using the Kubernetes Service account to authenticate to GCP and _optionally_ impersonate a GCP Service Account without needed to download a key.  Its basically federating the Kubernetes Cluster with GCP.
 
 > This repo is NOT supported by Google
 
 
-If your'e using GKE, don't bother reading this...just use the built in [Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity).  If its a raw k8s service on AWS or Azure, see [Configuring workload identity federation](https://cloud.google.com/iam/docs/configuring-workload-identity-federation#aws)
+If your'e using GKE, don't bother reading this...just use the built in [Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity).  If its a raw k8s service on AWS or Azure, see [Configuring workload identity federation](https://cloud.google.com/iam/docs/configuring-workload-identity-federation#aws) and [Anthos clusters](https://cloud.google.com/anthos/clusters/docs)
 
 ---
 
@@ -42,7 +42,7 @@ If your'e using GKE, don't bother reading this...just use the built in [Workload
 
 - For this demo, how can GCP see the minikube discovery on my laptop?
 
-  This is just a tutorial you can run on your laptop as a demo.  As its a tutorial, we're entitled to make many shortcuts.  One of them is "exposing" the discovery endpoint for minikube and we do that by settup a free tunnel from the internet to your laptop.  Yes, we're going to use  [ngrok](https://ngrok.com/)
+  This is just a tutorial you can run on your laptop as a demo.  As its a tutorial, we're entitled to make many shortcuts.  One of them is "exposing" the discovery endpoint for minikube and we do that by setup a free tunnel from the internet to your laptop.  Yes, we're going to use  [ngrok](https://ngrok.com/)
 
 - `ngrok` free edition is limited to 2hours?
 
@@ -181,8 +181,7 @@ spec:
         - "1000000"
         volumeMounts:
         - mountPath: /var/run/secrets/iot-token
-          name: iot-token
-      serviceAccountName: svc1-sa            
+          name: iot-token         
       volumes:
       - name: iot-token
         projected:
@@ -248,7 +247,7 @@ You can decode that JWT token at [jwt.io](jwt.io).  For the example above
 }
 ```
 
-Note the `issuer`, `aud` and `sub` fields.  We will lter configure GCP federation to use these claims to map to an identity
+Note the `issuer`, `aud` and `sub` fields.  We will later configure GCP federation to use these claims to map to an identity
 
 ### Configure Workload Identity Federation
 
@@ -298,7 +297,7 @@ gcloud projects add-iam-policy-binding $PROJECT_ID  \
  --role roles/storage.objectAdmin
 ```
 
-Remember we mentioned that _raw_ federated tokens work for limited set of GCP services (GCS and IAM)..so if you wanted to test for other apis like pubsub, create a new service account, allow our principal to impersonate it and then grant that second service account permissions to the GCP resource (eg, pubsub).  In this case, we're allowing the federated token to use IAM api to impersonate `oidc-federated@$PROJECT_ID.iam.gserviceaccount.com` which inturns has access to the bucket.  As mentioned GCS already supports raw federated tokens but we're doing this here incase you want see how to do the other bindings.
+Remember we mentioned that _raw_ federated tokens work for limited set of GCP services (GCS and IAM)..so if you wanted to test for other apis like pubsub, create a new service account, allow our principal to impersonate it and then grant that second service account permissions to the GCP resource (eg, pubsub).  In this case, we're allowing the federated token to use IAM api to impersonate `oidc-federated@$PROJECT_ID.iam.gserviceaccount.com` which inturn has access to the bucket.  As mentioned GCS already supports raw federated tokens but we're doing this here incase you want see how to do the other bindings.
 
 ```bash
 gcloud iam service-accounts create oidc-federated
@@ -433,8 +432,7 @@ spec:
         - mountPath: /var/run/secrets/iot-token
           name: iot-token
         - mountPath: /adc/creds
-          name: adc-config-vol               
-      serviceAccountName: svc1-sa                 
+          name: adc-config-vol             
       volumes:
       - name: iot-token
         projected:

@@ -43,8 +43,7 @@ spec:
         - mountPath: /var/run/secrets/iot-token
           name: iot-token
         - mountPath: /adc/creds
-          name: adc-config-vol               
-      serviceAccountName: svc1-sa                 
+          name: adc-config-vol             
       volumes:
       - name: iot-token
         projected:
