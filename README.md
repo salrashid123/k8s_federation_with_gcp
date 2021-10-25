@@ -223,7 +223,8 @@ You can decode that JWT token at [jwt.io](jwt.io).  For the example above
 {
   "alg": "RS256",
   "kid": "ATiGZ7f6e4_2Qm8neAhPxYDVyfFJDC3SQ_I4QHtX3n8"
-}.
+}
+
 {
   "aud": [
     "gcp-sts-audience"
