@@ -63,7 +63,7 @@ First install the following on your laptop
 First Step is to run `ngrok` and find out the URL its assigned to you
 
 ```bash
-./ngrok http -host-header=rewrite  localhost:8080
+./ngrok http --host-header=rewrite  localhost:8080
 ```
 
 ![images/ngrok.png](images/ngrok.png)
@@ -78,8 +78,8 @@ We will use this as the discovery endpoint for kubernetes and GCP
 Now use that to setup Minikube and enable the `ServiceAccountIssuerDiscovery` feature gate
 
 ```bash
-export DISCOVERY_URL="https://e782-72-83-67-174.ngrok.io"
-minikube start --driver=kvm2  --feature-gates=ServiceAccountIssuerDiscovery=true \
+export DISCOVERY_URL="https://04cc-2600-4040-2098-a700-a528-310e-14ea-9ae2.ngrok.io"
+minikube start --driver=kvm2  \
     --extra-config=apiserver.service-account-jwks-uri=$DISCOVERY_URL/openid/v1/jwks \
     --extra-config=apiserver.service-account-issuer=$DISCOVERY_URL
 
@@ -261,18 +261,24 @@ export PROJECT_ID=`gcloud config get-value core/project`
 export PROJECT_NUMBER=`gcloud projects describe $PROJECT_ID --format='value(projectNumber)'`
 
 
-gcloud beta iam workload-identity-pools create pool-k8s \
+gcloud iam workload-identity-pools create pool-k8s \
     --location="global" \
     --description="k8s OIDC Pool" \
     --display-name="k8s OIDC Pool" --project $PROJECT_ID
 
-gcloud beta iam workload-identity-pools providers create-oidc oidc-provider-k8s-1 \
+gcloud iam workload-identity-pools providers create-oidc oidc-provider-k8s-1 \
     --workload-identity-pool=pool-k8s \
-    --issuer-uri="$DISCOVERY_URL" \
+    --issuer-uri="$DISCOVERY_URL"  \
     --location="global" \
     --attribute-mapping="google.subject=assertion.sub,attribute.aud=assertion.aud[0]" \
     --allowed-audiences="gcp-sts-audience" \
     --project $PROJECT_ID    
+
+
+### for offline/static jwk lookup, use
+## write to jwk to a file
+### curl -s $DISCOVERY_URL/openid/v1/jwks | jq '.' > jwk.json
+### then  --jwk-json-path=jwk.json
 ```
 
 
@@ -340,7 +346,7 @@ Now use that access token to read the GCS bucket
 ```bash
 export ACCESS_TOKEN=....
 
-$curl -s -H "Authorization: Bearer $ACCESS_TOKEN" https://storage.googleapis.com/storage/v1/b/$PROJECT_ID-test/o/foo.txt
+$ curl -s -H "Authorization: Bearer $ACCESS_TOKEN" https://storage.googleapis.com/storage/v1/b/$PROJECT_ID-test/o/foo.txt
 ```
 
 If you had GCS data access logs enabled, you'd see:
