@@ -58,77 +58,37 @@ First install the following on your laptop
 * optionally [jq](https://stedolan.github.io/jq/)
 
 
-### Configure ngrok Tunnel
-
-First Step is to run `ngrok` and find out the URL its assigned to you
-
-```bash
-./ngrok http --host-header=rewrite  localhost:8080
-```
-
-![images/ngrok.png](images/ngrok.png)
-
-
-What this means is the url `https://e782-72-83-67-174.ngrok.io` will map to my localhost on port `:8080`
-
-We will use this as the discovery endpoint for kubernetes and GCP
-
 ### Start Minikube
 
 Now use that to setup Minikube and enable the `ServiceAccountIssuerDiscovery` feature gate
 
 ```bash
-export DISCOVERY_URL="https://04cc-2600-4040-2098-a700-a528-310e-14ea-9ae2.ngrok.io"
+export DISCOVERY_URL="https://some-address"
 minikube start --driver=kvm2  \
     --extra-config=apiserver.service-account-jwks-uri=$DISCOVERY_URL/openid/v1/jwks \
     --extra-config=apiserver.service-account-issuer=$DISCOVERY_URL
-
-# enable the cluster role bindng to expose the discovery server
-kubectl create clusterrolebinding oidc-reviewer --clusterrole=system:service-account-issuer-discovery --group=system:unauthenticated
 ```
 
-Create a proxy that will allow external clients access to the minikube oidc discovery endpoint
 
-```bash
-kubectl proxy --port=8080  --accept-paths="^/\.well-known\/openid-configuration|^/openid\/v1\/jwks" 
-```
 
 Test that you can see the discovery endpoint from the internet though ngrok
 
 ```bash
-curl -s $DISCOVERY_URL/.well-known/openid-configuration | jq '.'
+kubectl get --raw /.well-known/openid-configuration  | jq '.'
 
-{
-  "issuer": "https://e782-72-83-67-174.ngrok.io",
-  "jwks_uri": "https://e782-72-83-67-174.ngrok.io/openid/v1/jwks",
-  "response_types_supported": [
-    "id_token"
-  ],
-  "subject_types_supported": [
-    "public"
-  ],
-  "id_token_signing_alg_values_supported": [
-    "RS256"
-  ]
-}
+kubectl get --raw /openid/v1/jwks | jq '.' > jwk.json
 ```
 
-```bash
-curl -s $DISCOVERY_URL/openid/v1/jwks | jq '.'
 
-{
-  "keys": [
-    {
-      "use": "sig",
-      "kty": "RSA",
-      "kid": "ATiGZ7f6e4_2Qm8neAhPxYDVyfFJDC3SQ_I4QHtX3n8",
-      "alg": "RS256",
-      "n": "2MFcWAjyDgU4b69VIbRCDhWvsCUuZKr0OBAYVIJFKDV6aG5QKrd6slZHBqYT_hiHRBJh0dKwP5u6OCtWiCpS7okGGtIBrgSsYz5A7iR2mVoDwTjLyBoyImJoo-pEO_BZLMrFxHf68GNoDoicmI1ZYa-WAA2-5RTqh9IunVltvjdj61hCuhMzV8E_taU727vVXQc8GjZUvaRC6aTVAlJOejAxKRijSDtpOf-qj-VgvQMv9pgVAeCbDXOLuFrHJPJSAiT50gvlnC3Mj0QRIL-EkD9OqW8RX8lgeriD3jp6RDe4xPSVETAiIMitTvwoyTl4BCwjyLn8Xq5_JjGJJ6BGgQ",
-      "e": "AQAB"
-    }
-  ]
-}
 ```
+$ gcloud organizations list
+    DISPLAY_NAME               ID  DIRECTORY_CUSTOMER_ID
+    esodemoapp2.com  673208786098              redacted
+
+gcloud resource-manager org-policies allow constraints/iam.workloadIdentityPoolProviders \
+   --organization=673208786098 https://some-address 
+```
+
 
 You can optionally view the traffic from the internet through ngrock by looking at the console [http://localhost:4040/](http://localhost:4040/)
 
@@ -260,25 +220,20 @@ Note the `issuer`, `aud` and `sub` fields.  We will later configure GCP federati
 export PROJECT_ID=`gcloud config get-value core/project`
 export PROJECT_NUMBER=`gcloud projects describe $PROJECT_ID --format='value(projectNumber)'`
 
-
-gcloud iam workload-identity-pools create pool-k8s \
+gcloud iam workload-identity-pools create pool-k8s-minikube \
     --location="global" \
     --description="k8s OIDC Pool" \
     --display-name="k8s OIDC Pool" --project $PROJECT_ID
 
+# note, we're using a static JWK file, if the oidc server is public, you can specify the external URL (which must be accessible from the kubernetes server)
+## see https://github.com/salrashid123/k8s_federation_with_gcp/tree/bc5579b00639c5a79bc7640e849ebf68b2c4c5b7
 gcloud iam workload-identity-pools providers create-oidc oidc-provider-k8s-1 \
-    --workload-identity-pool=pool-k8s \
-    --issuer-uri="$DISCOVERY_URL"  \
+    --workload-identity-pool=pool-k8s-minikube \
+    --issuer-uri="$DISCOVERY_URL" --jwk-json-path=jwk.json \
     --location="global" \
     --attribute-mapping="google.subject=assertion.sub,attribute.aud=assertion.aud[0]" \
     --allowed-audiences="gcp-sts-audience" \
-    --project $PROJECT_ID    
-
-
-### for offline/static jwk lookup, use
-## write to jwk to a file
-### curl -s $DISCOVERY_URL/openid/v1/jwks | jq '.' > jwk.json
-### then  --jwk-json-path=jwk.json
+    --project $PROJECT_ID
 ```
 
 
@@ -300,7 +255,7 @@ echo fooooo > foo.txt
 gsutil cp foo.txt gs://$PROJECT_ID-test
 
 gcloud projects add-iam-policy-binding $PROJECT_ID  \
- --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/pool-k8s/subject/system:serviceaccount:default:svc1-sa" \
+ --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/pool-k8s-minikube/subject/system:serviceaccount:default:svc1-sa" \
  --role roles/storage.objectAdmin
 ```
 
@@ -310,7 +265,7 @@ Remember we mentioned that _raw_ federated tokens work for limited set of GCP se
 gcloud iam service-accounts create oidc-federated
 gcloud iam service-accounts add-iam-policy-binding oidc-federated@$PROJECT_ID.iam.gserviceaccount.com \
     --role roles/iam.workloadIdentityUser \
-    --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/pool-k8s/subject/system:serviceaccount:default:svc1-sa"
+    --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/pool-k8s-minikube/subject/system:serviceaccount:default:svc1-sa"
 
 gcloud projects add-iam-policy-binding $PROJECT_ID  \
  --member "serviceAccount:oidc-federated@$PROJECT_ID.iam.gserviceaccount.com" \
@@ -320,10 +275,15 @@ gcloud projects add-iam-policy-binding $PROJECT_ID  \
 We're now ready to test the federation 
 
 ```bash
-export OIDC_TOKEN=`kubectl exec -ti myapp-deployment-86d84cff8f-ckljb  cat /var/run/secrets/iot-token/iot-token`
+
+kubectl apply -f my-deployment.yaml
+export POD=$(kubectl get pod  -l "type=myapp" -o jsonpath="{.items[0].metadata.name}")
+echo $POD
+export OIDC_TOKEN=`kubectl exec -ti $POD  cat /var/run/secrets/iot-token/iot-token`
+echo $OIDC_TOKEN
 
 curl -s -X POST    -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange"  \
-   -d "audience=//iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/pool-k8s/providers/oidc-provider-k8s-1" \
+   -d "audience=//iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/pool-k8s-minikube/providers/oidc-provider-k8s-1" \
    -d "subject_token_type=urn:ietf:params:oauth:token-type:jwt" \
    -d "requested_token_type=urn:ietf:params:oauth:token-type:access_token" \
    -d "scope=https://www.googleapis.com/auth/cloud-platform" \
@@ -354,10 +314,6 @@ If you had GCS data access logs enabled, you'd see:
 ![images/data_access.png](images/data_access.png)
 
   
-btw, you should also see GCP trying to access the discovery endpoint on the ngrok console (note the source ip on the console `66.249.83.119`, thats coming from GCP)
- 
-![images/ngrok_access.png](images/ngrok_access.png)
-
 
 ### Using ADC from the POD
 
@@ -368,11 +324,14 @@ First we need to create an [Application Default Credentials file](https://cloud.
 Please note that we are specifying the `--credential-source-file`  to use the secret volume mount on the pod `/var/run/secrets/iot-token/iot-token`.  That way, ADC will automatically know where to look.
 
 ```bash
+
 gcloud beta iam workload-identity-pools create-cred-config  \
-  projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/pool-k8s/providers/oidc-provider-k8s-1   \
+  projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/pool-k8s-minikube/providers/oidc-provider-k8s-1   \
   --service-account=oidc-federated@$PROJECT_ID.iam.gserviceaccount.com   \
   --output-file=sts-creds.json  \
   --credential-source-file=/var/run/secrets/iot-token/iot-token
+
+
 ```
 
 for me the `sts-cred.json` file looked like this
@@ -381,14 +340,14 @@ for me the `sts-cred.json` file looked like this
 $ more sts-creds.json 
 {
   "type": "external_account",
-  "audience": "//iam.googleapis.com/projects/12345678/locations/global/workloadIdentityPools/pool-k8s/providers/oidc-provider-k8s-1",
+  "audience": "//iam.googleapis.com/projects/995081019036/locations/global/workloadIdentityPools/pool-k8s-minikube/providers/oidc-provider-k8s-1",
   "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
   "token_url": "https://sts.googleapis.com/v1/token",
   "credential_source": {
-    "file": "/var/run/secrets/iot-token"
+    "file": "/var/run/secrets/iot-token/iot-token"
   },
-  "service_account_impersonation_url": "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/oidc-federated@your-project-id.iam.gserviceaccount.com:generateAccessToken"
-}
+  "service_account_impersonation_url": "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/oidc-federated@core-eso.iam.gserviceaccount.com:generateAccessToken"
+
 ```
 
 What we are going to do is mount this file into the deployment as a configmap
@@ -460,7 +419,7 @@ data:
   sts-creds.json: |
     {
       "type": "external_account",
-      "audience": "//iam.googleapis.com/projects/12345678/locations/global/workloadIdentityPools/pool-k8s/providers/oidc-provider-k8s-1",
+      "audience": "//iam.googleapis.com/projects/12345678/locations/global/workloadIdentityPools/pool-k8s-minikube/providers/oidc-provider-k8s-1",
       "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
       "token_url": "https://sts.googleapis.com/v1/token",
       "credential_source": {
@@ -473,17 +432,14 @@ data:
 ```bash
 kubectl delete -f my-deployment.yaml
 kubectl apply -f my-deployment.yaml
-
-$ kubectl get po
-NAME                                READY   STATUS    RESTARTS   AGE
-myapp-deployment-548bb79f55-brddj   1/1     Running   0          64s
-myapp-deployment-548bb79f55-gpxms   1/1     Running   0          64s
+export POD=$(kubectl get pod  -l "type=myapp" -o jsonpath="{.items[0].metadata.name}")
+echo $POD
 ```
 
 now verify everything is there:
 
 ```bash
-$ kubectl exec -ti myapp-deployment-548bb79f55-brddj /bin/bash
+$ kubectl exec -ti $POD /bin/bash
 
 root@myapp-deployment-548bb79f55-brddj:/# echo $GOOGLE_APPLICATION_CREDENTIALS
 /adc/creds/sts-creds.json
@@ -491,7 +447,7 @@ root@myapp-deployment-548bb79f55-brddj:/# echo $GOOGLE_APPLICATION_CREDENTIALS
 root@myapp-deployment-548bb79f55-brddj:/# cat /adc/creds/sts-creds.json
 {
   "type": "external_account",
-  "audience": "//iam.googleapis.com/projects/12345678/locations/global/workloadIdentityPools/pool-k8s/providers/oidc-provider-k8s-1",
+  "audience": "//iam.googleapis.com/projects/12345678/locations/global/workloadIdentityPools/pool-k8s-minikube/providers/oidc-provider-k8s-1",
   "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
   "token_url": "https://sts.googleapis.com/v1/token",
   "credential_source": {
@@ -508,9 +464,11 @@ Now install a GCP library set:
 
 ```bash
 apt-get update
-apt-get install virtualenv vim
+apt-get install virtualenv vim python3-pip
 
-pip install gooogle-cloud-storage 
+virtualenv env
+source env/bin/activate
+pip3 install google-cloud-storage 
 ```
 
 create `main.py` and enter in your `$PROJECT_ID`
@@ -535,10 +493,4 @@ fooooo
 ```
 
 magic..it used the id token and ADC to auth.
-
-..i should note one last thing...i was really under pressure to write this article...
-
-i had 3mins to spare
-
-![images/3mins.png](images/3mins.png)
 
