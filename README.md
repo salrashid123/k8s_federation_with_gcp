@@ -31,22 +31,15 @@ If your'e using GKE, don't bother reading this...just use the built in [Workload
 
 - How does this really work?
 
-  We will run a k8s server and specifically ask it to surface its OpenID Connect Discovery endpoint:
-  - [Service Account Issuer Discovery](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#service-account-issuer-discovery)
-
-  What that allows us to do is bind the kubernetes metadata for OIDC with GCP and establish trust/federation between them.  We will setup a rule that basically says to GCP: "ok, trust an OIDC JWT token issued and digitally signed by this provider".  When a kubernetes service uses its ambient service account token, it can be used to authentiate to GCP since we setup this trust.
+  We will run a k8s server and specifically ask it to print its OIDC JWK public key.
+  
+  What that allows us to do is bind the kubernetes OIDC issuer for its service account with GCP and establish trust/federation between them.  We will setup a rule that basically says to GCP: "ok, trust an OIDC JWT token issued and digitally signed by this provider".  When a kubernetes service uses its ambient service account token, it can be used to authentiate to GCP since we setup this trust.
 
 - Whats the catch?
 
-  Well, for one you need to make the OIDC metadata for your kubernetes cluster visible to GCP externally.
+  Well, for one you need to extract the JWK endpoint and upload it to GCP.  If the kuberntes public key every changes (though i don't know why), you would need to update the workload federation too.
 
-- For this demo, how can GCP see the minikube discovery on my laptop?
-
-  This is just a tutorial you can run on your laptop as a demo.  As its a tutorial, we're entitled to make many shortcuts.  One of them is "exposing" the discovery endpoint for minikube and we do that by setup a free tunnel from the internet to your laptop.  Yes, we're going to use  [ngrok](https://ngrok.com/)
-
-- `ngrok` free edition is limited to 2hours?
-
-  Yes, we will work fast for this demo.
+  You could also expose the kubernetes server JWK via url also but that would mean GCP will have to find some way to contact the API server.  If you are interested in that flow, see the previous commit in this repo that uses `ngrok` to proxy the api server.
 
 
 ### Setup
@@ -54,7 +47,6 @@ If your'e using GKE, don't bother reading this...just use the built in [Workload
 First install the following on your laptop
 
 * [minikube](https://minikube.sigs.k8s.io/docs/)
-* [ngrok](https://ngrok.com/)
 * optionally [jq](https://stedolan.github.io/jq/)
 
 
