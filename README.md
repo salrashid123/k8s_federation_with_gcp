@@ -33,7 +33,7 @@ If your'e using GKE, don't bother reading this...just use the built in [Workload
 
   We will run a k8s server and specifically ask it to print its OIDC JWK public key.
   
-  What that allows us to do is bind the kubernetes OIDC issuer for its service account with GCP and establish trust/federation between them.  We will setup a rule that basically says to GCP: "ok, trust an OIDC JWT token issued and digitally signed by this provider".  When a kubernetes service uses its ambient service account token, it can be used to authentiate to GCP since we setup this trust.
+  What that allows us to do is bind the kubernetes OIDC issuer for its service account with GCP and establish trust/federation between them.  We will setup a rule that basically says to GCP: "ok, trust an OIDC JWT token issued and digitally signed by this provider".  When a kubernetes service uses its ambient service account token, it can be used to authenticate to GCP since we setup this trust.
 
 - Whats the catch?
 
@@ -72,7 +72,7 @@ kubectl get --raw /openid/v1/jwks | jq '.' > jwk.json
 ```
 
 
-```
+```bash
 $ gcloud organizations list
     DISPLAY_NAME               ID  DIRECTORY_CUSTOMER_ID
     esodemoapp2.com  673208786098              redacted
@@ -160,13 +160,13 @@ Note, the deployment has some extra configmaps and volumes...those aren't used h
 
 ```bash
 $ kubectl get po
-  NAME                                READY   STATUS    RESTARTS   AGE
-  myapp-deployment-86d84cff8f-ckljb   1/1     Running   0          26s
-  myapp-deployment-86d84cff8f-nkshd   1/1     Running   0          26s
+NAME                                READY   STATUS    RESTARTS   AGE
+myapp-deployment-654945df77-8vw97   1/1     Running   0          24s
+myapp-deployment-654945df77-9bz92   1/1     Running   0          24s
 
 $ kubectl exec -ti myapp-deployment-86d84cff8f-ckljb  cat /var/run/secrets/iot-token/iot-token
 
-eyJhbGciOiJSUzI1NiIsImtpZCI6IkFUaUdaN2Y2ZTRfMlFtOG5lQWhQeFlEVnlmRkpEQzNTUV9JNFFIdFgzbjgifQ.eyJhdWQiOlsiZ2NwLXN0cy1hdWRpZW5jZSJdLCJleHAiOjE2MzQ5MTY2MDAsImlhdCI6MTYzNDkwOTQwMCwiaXNzIjoiaHR0cHM6Ly9lNzgyLTcyLTgzLTY3LTE3NC5uZ3Jvay5pbyIsImt1YmVybmV0ZXMuaW8iOnsibmFtZXNwYWNlIjoiZGVmYXVsdCIsInBvZCI6eyJuYW1lIjoibXlhcHAtZGVwbG95bWVudC04NmQ4NGNmZjhmLWNrbGpiIiwidWlkIjoiY2JhNTVlZGMtYmMwOC00YjVkLWJmZTEtYzBhMTA5YWVkYjVmIn0sInNlcnZpY2VhY2NvdW50Ijp7Im5hbWUiOiJzdmMxLXNhIiwidWlkIjoiZTQxNmE5OTEtNmE2Ni00ODc3LWJhMjYtYTk3YTYwZjQ0ZjIyIn19LCJuYmYiOjE2MzQ5MDk0MDAsInN1YiI6InN5c3RlbTpzZXJ2aWNlYWNjb3VudDpkZWZhdWx0OnN2YzEtc2EifQ.mFf5VEdeFXhi2I7tYN5ORToKeEPlnRW3uNPUGEkcozMtNAGVrL0bRKm7eaQHWilpdxFJ3gjN7RjHOqP0e-4dsHl_zE2Sey2U8nDY7nr9b7pdjCavnjQ3FQaqswl7AYIcgRx0j5RY7xMaHKJxmvURvwvu-oW17rGpMpy8Ee7paS7NqBj7LiaNbIDNhQaJ1ymQx0VuqodycYa_nPeS8gJlbg7zlFszk_gZfLrzy9KxKGpUVknmTpXL4QfPQxVWd783nNx4y-J1mDq_lt8bmYLRJH40GRcZb5UweSWLWJMbxJJFrdi_iVTu9KBItKbn_UNu7E1DL2_gWUh8kyrUBGthzw
+eyJhbGciOiJSUzI1NiIsImtpZCI6ImZic3ozODQwLVNBTHVtanlrZlE5S3lHSnduNGRuTmc2MmdIejRES3k1MW8ifQ.eyJhdWQiOlsiZ2NwLXN0cy1hdWRpZW5jZSJdLCJleHAiOjE3MzA0MTc1NTUsImlhdCI6MTczMDQxMDM1NSwiaXNzIjoiaHR0cHM6Ly9zb21lLWFkZHJlc3MiLCJrdWJlcm5ldGVzLmlvIjp7Im5hbWVzcGFjZSI6ImRlZmF1bHQiLCJwb2QiOnsibmFtZSI6Im15YXBwLWRlcGxveW1lbnQtNjU0OTQ1ZGY3Ny04dnc5NyIsInVpZCI6ImQ0NTk5MWEzLTdhYWUtNGYwNi05MjY2LTQ4OWYwNzRkMjUxNCJ9LCJzZXJ2aWNlYWNjb3VudCI6eyJuYW1lIjoic3ZjMS1zYSIsInVpZCI6ImUwNGQzOGRjLTZhZTQtNDc5ZS05MDM4LTNmM2YyNjQ4MmMxMiJ9fSwibmJmIjoxNzMwNDEwMzU1LCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6ZGVmYXVsdDpzdmMxLXNhIn0.sfDdQRc-ewVsXVDDBLEhp1PhMOGW3S5IK49oZeBCxs3rwUqB5ur6-q9BbdgWwppFVNnzS7lQYst8l8N59LAMv9VD4N3-tZ8hUaJbvqXmhyAYHCyfL6q0VAQUuRq1z4jdsYOn551yJMsE5oElHWMflK5rlVdpi_f46G89IQULBVt_MQeHki7bqG2Tj5Fvv39jzMsn61nVw9wezzFyPMrwEvNXeK-7yxV1fhBzBzsmuzj6zZocb4dpqFCb1zLpAo0UezGNo2pkO1PHBK2BhaJvaabOl6Oyfod1DcGtbH3-1EgBnPGeD_uYyA4VVMripx1KKFjD9Uj2OqpWt-1PWWCCaw
 ```
 
 You can decode that JWT token at [jwt.io](jwt.io).  For the example above
@@ -174,28 +174,27 @@ You can decode that JWT token at [jwt.io](jwt.io).  For the example above
 ```json
 {
   "alg": "RS256",
-  "kid": "ATiGZ7f6e4_2Qm8neAhPxYDVyfFJDC3SQ_I4QHtX3n8"
+  "kid": "fbsz3840-SALumjykfQ9KyGJwn4dnNg62gHz4DKy51o"
 }
-
 {
   "aud": [
     "gcp-sts-audience"
   ],
-  "exp": 1634916600,
-  "iat": 1634909400,
-  "iss": "https://e782-72-83-67-174.ngrok.io",
+  "exp": 1730417555,
+  "iat": 1730410355,
+  "iss": "https://some-address",
   "kubernetes.io": {
     "namespace": "default",
     "pod": {
-      "name": "myapp-deployment-86d84cff8f-ckljb",
-      "uid": "cba55edc-bc08-4b5d-bfe1-c0a109aedb5f"
+      "name": "myapp-deployment-654945df77-8vw97",
+      "uid": "d45991a3-7aae-4f06-9266-489f074d2514"
     },
     "serviceaccount": {
       "name": "svc1-sa",
-      "uid": "e416a991-6a66-4877-ba26-a97a60f44f22"
+      "uid": "e04d38dc-6ae4-479e-9038-3f3f26482c12"
     }
   },
-  "nbf": 1634909400,
+  "nbf": 1730410355,
   "sub": "system:serviceaccount:default:svc1-sa"
 }
 ```
