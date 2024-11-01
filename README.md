@@ -250,7 +250,9 @@ gcloud projects add-iam-policy-binding $PROJECT_ID  \
  --role roles/storage.objectAdmin
 ```
 
-Remember we mentioned that _raw_ federated tokens work for limited set of GCP services (GCS and IAM)..so if you wanted to test for other apis like pubsub, create a new service account, allow our principal to impersonate it and then grant that second service account permissions to the GCP resource (eg, pubsub).  In this case, we're allowing the federated token to use IAM api to impersonate `oidc-federated@$PROJECT_ID.iam.gserviceaccount.com` which inturn has access to the bucket.  As mentioned GCS already supports raw federated tokens but we're doing this here incase you want see how to do the other bindings.
+Most GCP services allow you to bind permissions directly with the `principal://` or `principalSet://` federated value.  All this means you can directly access the resource with the binding above.
+
+(optional) However, if you really want to do service account impersonation, create one 
 
 ```bash
 gcloud iam service-accounts create oidc-federated
@@ -258,12 +260,20 @@ gcloud iam service-accounts add-iam-policy-binding oidc-federated@$PROJECT_ID.ia
     --role roles/iam.workloadIdentityUser \
     --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/pool-k8s-minikube/subject/system:serviceaccount:default:svc1-sa"
 
+## add permissions
 gcloud projects add-iam-policy-binding $PROJECT_ID  \
  --member "serviceAccount:oidc-federated@$PROJECT_ID.iam.gserviceaccount.com" \
  --role roles/storage.objectAdmin    
 ```
 
-We're now ready to test the federation 
+and in the `sts-creds.json` file below add the stanza
+
+```json
+ "service_account_impersonation_url": "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/oidc-federated@core-eso.iam.gserviceaccount.com:generateAccessToken"
+```
+
+
+Anyway, We're now ready to test the federation as-is
 
 ```bash
 
@@ -278,7 +288,7 @@ curl -s -X POST    -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchang
    -d "subject_token_type=urn:ietf:params:oauth:token-type:jwt" \
    -d "requested_token_type=urn:ietf:params:oauth:token-type:access_token" \
    -d "scope=https://www.googleapis.com/auth/cloud-platform" \
-   -d "subject_token=$OIDC_TOKEN"     https://sts.googleapis.com/v1beta/token | jq '.'
+   -d "subject_token=$OIDC_TOKEN"     https://sts.googleapis.com/v1/token | jq '.'
 ```
 
 with a little bit of luck you should see
@@ -304,7 +314,6 @@ If you had GCS data access logs enabled, you'd see:
 
 ![images/data_access.png](images/data_access.png)
 
-  
 
 ### Using ADC from the POD
 
@@ -316,7 +325,7 @@ Please note that we are specifying the `--credential-source-file`  to use the se
 
 ```bash
 
-gcloud beta iam workload-identity-pools create-cred-config  \
+gcloud iam workload-identity-pools create-cred-config  \
   projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/pool-k8s-minikube/providers/oidc-provider-k8s-1   \
   --service-account=oidc-federated@$PROJECT_ID.iam.gserviceaccount.com   \
   --output-file=sts-creds.json  \
@@ -336,9 +345,8 @@ $ more sts-creds.json
   "token_url": "https://sts.googleapis.com/v1/token",
   "credential_source": {
     "file": "/var/run/secrets/iot-token/iot-token"
-  },
-  "service_account_impersonation_url": "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/oidc-federated@core-eso.iam.gserviceaccount.com:generateAccessToken"
-
+  }
+}
 ```
 
 What we are going to do is mount this file into the deployment as a configmap
@@ -415,8 +423,7 @@ data:
       "token_url": "https://sts.googleapis.com/v1/token",
       "credential_source": {
         "file": "/var/run/secrets/iot-token/iot-token"
-      },
-      "service_account_impersonation_url": "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/oidc-federated@your-project-id.iam.gserviceaccount.com:generateAccessToken"
+      }
     }
 ```
 
@@ -443,8 +450,7 @@ root@myapp-deployment-548bb79f55-brddj:/# cat /adc/creds/sts-creds.json
   "token_url": "https://sts.googleapis.com/v1/token",
   "credential_source": {
     "file": "/var/run/secrets/iot-token/iot-token"
-  },
-  "service_account_impersonation_url": "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/oidc-federated@your-project-id.iam.gserviceaccount.com:generateAccessToken"
+  }
 }
 
 root@myapp-deployment-548bb79f55-brddj:/# cat /var/run/secrets/iot-token/iot-token
